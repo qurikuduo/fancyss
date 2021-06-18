@@ -2296,7 +2296,7 @@ detect() {
 				echo_date "+        v2ray程序对路由器开销极大，请挂载虚拟内存后再开启！            +"
 				echo_date "+       如果使用 ws + tls + web 方案，建议1G虚拟内存，以保证稳定！     +"
 				echo_date "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-				close_in_five
+				#close_in_five
 			fi
 		fi
 	fi
