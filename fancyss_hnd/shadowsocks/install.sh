@@ -2,8 +2,6 @@
 source /koolshare/scripts/base.sh
 alias echo_date='echo 【$(TZ=UTC-8 date -R +%Y年%m月%d日\ %X)】:'
 MODEL=
-UI_TYPE=ASUSWRT
-FW_TYPE_CODE=
 FW_TYPE_NAME=
 DIR=$(cd $(dirname $0); pwd)
 module=${DIR##*/}
@@ -19,21 +17,17 @@ get_model(){
 }
 
 get_fw_type() {
-	local KS_TAG=$(nvram get extendno|grep koolshare)
+	local KS_TAG=$(nvram get extendno|grep -E "_kool")
 	if [ -d "/koolshare" ];then
 		if [ -n "${KS_TAG}" ];then
-			FW_TYPE_CODE="2"
 			FW_TYPE_NAME="koolshare官改固件"
 		else
-			FW_TYPE_CODE="4"
 			FW_TYPE_NAME="koolshare梅林改版固件"
 		fi
 	else
 		if [ "$(uname -o|grep Merlin)" ];then
-			FW_TYPE_CODE="3"
 			FW_TYPE_NAME="梅林原版固件"
 		else
-			FW_TYPE_CODE="1"
 			FW_TYPE_NAME="华硕官方固件"
 		fi
 	fi
@@ -48,42 +42,22 @@ platform_test(){
 	fi
 }
 
-get_ui_type(){
-	# default value
-	[ "${MODEL}" == "RT-AC86U" ] && local ROG_RTAC86U=0
-	[ "${MODEL}" == "GT-AC2900" ] && local ROG_GTAC2900=1
-	[ "${MODEL}" == "GT-AC5300" ] && local ROG_GTAC5300=1
-	[ "${MODEL}" == "GT-AX11000" ] && local ROG_GTAX11000=1
-	[ "${MODEL}" == "GT-AXE11000" ] && local ROG_GTAXE11000=1
-	local KS_TAG=$(nvram get extendno|grep koolshare)
-	local EXT_NU=$(nvram get extendno)
-	local EXT_NU=$(echo ${EXT_NU%_*} | grep -Eo "^[0-9]{1,10}$")
-	local BUILDNO=$(nvram get buildno)
-	[ -z "${EXT_NU}" ] && EXT_NU="0" 
-	# RT-AC86U
-	if [ -n "${KS_TAG}" -a "${MODEL}" == "RT-AC86U" -a "${EXT_NU}" -lt "81918" -a "${BUILDNO}" != "386" ];then
-		# RT-AC86U的官改固件，在384_81918之前的固件都是ROG皮肤，384_81918及其以后的固件（包括386）为ASUSWRT皮肤
-		ROG_RTAC86U=1
-	fi
-	# GT-AC2900
-	if [ "${MODEL}" == "GT-AC2900" ] && [ "${FW_TYPE_CODE}" == "3" -o "${FW_TYPE_CODE}" == "4" ];then
-		# GT-AC2900从386.1开始已经支持梅林固件，其UI是ASUSWRT
-		ROG_GTAC2900=0
-	fi
-	# GT-AX11000
-	if [ "${MODEL}" == "GT-AX11000" -o "${MODEL}" == "GT-AX11000_BO4" ] && [ "${FW_TYPE_CODE}" == "3" -o "${FW_TYPE_CODE}" == "4" ];then
-		# GT-AX11000从386.2开始已经支持梅林固件，其UI是ASUSWRT
-		ROG_GTAX11000=0
-	fi
-	# ROG UI
-	if [ "${ROG_GTAC5300}" == "1" -o "${ROG_RTAC86U}" == "1" -o "${ROG_GTAC2900}" == "1" -o "${ROG_GTAX11000}" == "1" -o "${ROG_GTAXE11000}" == "1" ];then
-		# GT-AC5300、RT-AC86U部分版本、GT-AC2900部分版本、GT-AX11000部分版本、GT-AXE11000全部版本，骚红皮肤
+set_skin(){
+	local UI_TYPE=ASUSWRT
+	local SC_SKIN=$(nvram get sc_skin)
+	local ROG_FLAG=$(grep -o "680516" /www/form_style.css|head -n1)
+	local TUF_FLAG=$(grep -o "D0982C" /www/form_style.css|head -n1)
+	if [ -n "${ROG_FLAG}" ];then
 		UI_TYPE="ROG"
 	fi
-	# TUF UI
-	if [ "${MODEL}" == "TUF-AX3000" ];then
-		# 官改固件，橙色皮肤
+	if [ -n "${TUF_FLAG}" ];then
 		UI_TYPE="TUF"
+	fi
+	
+	if [ -z "${SC_SKIN}" -o "${SC_SKIN}" != "${UI_TYPE}" ];then
+		echo_date "安装${UI_TYPE}皮肤！"
+		nvram set sc_skin="${UI_TYPE}"
+		nvram commit
 	fi
 }
 
@@ -152,8 +126,8 @@ install_now(){
 	rm -rf /koolshare/bin/speederv1
 	rm -rf /koolshare/bin/speederv2
 	rm -rf /koolshare/bin/udp2raw
+	rm -rf /koolshare/bin/xray
 	rm -rf /koolshare/bin/v2ray
-	rm -rf /koolshare/bin/v2ctl
 	rm -rf /koolshare/bin/v2ray-plugin
 	rm -rf /koolshare/bin/https_dns_proxy
 	rm -rf /koolshare/bin/httping
@@ -171,6 +145,7 @@ install_now(){
 	find /koolshare/init.d/ -name "*socks5.sh" | xargs rm -rf >/dev/null 2>&1
 
 	# legacy files should be removed
+	rm -rf /koolshare/bin/v2ctl >/dev/null 2>&1
 	rm -rf /koolshare/bin/dnsmasq >/dev/null 2>&1
 	rm -rf /koolshare/bin/Pcap_DNSProxy >/dev/null 2>&1
 
@@ -187,7 +162,7 @@ install_now(){
 	fi
 
 	# 对于jffs分区过小的插件，删除某些功能的二进制文件，比如RT-AX56U_V2的jffs只有15MB，所以移除一些功能
-	JFFS_TOTAL=$(df|grep -Ew "/jffs" | awk '{print $2}')
+	JFFS_TOTAL=$(df | grep -w "/jffs" | awk '{print $2}')
 	if [ "${JFFS_TOTAL}" -le "20000" ];then
 		echo_date "-------------------------------------------------------------"
 		echo_date "重要提示："
@@ -232,7 +207,7 @@ install_now(){
 
 	# 检测储存空间是否足够
 	echo_date "检测jffs分区剩余空间..."
-	SPACE_AVAL=$(df|grep jffs | awk '{print $4}')
+	SPACE_AVAL=$(df | grep -w "/jffs" | awk '{print $4}')
 	SPACE_NEED=$(du -s /tmp/shadowsocks | awk '{print $1}')
 	if [ "$SPACE_AVAL" -gt "$SPACE_NEED" ];then
 		echo_date 当前jffs分区剩余"$SPACE_AVAL" KB, 插件安装大概需要"$SPACE_NEED" KB，空间满足，继续安装！
@@ -269,21 +244,7 @@ install_now(){
 	chmod 755 /koolshare/bin/* >/dev/null 2>&1
 
 	# intall different UI
-	get_ui_type
-	if [ "${UI_TYPE}" == "ROG" ];then
-		echo_date "为插件安装ROG UI..."
-		cp -rf /tmp/shadowsocks/rog/res/shadowsocks.css /koolshare/res/
-	fi
-	
-	if [ "${UI_TYPE}" == "TUF" ];then
-		echo_date "为插件安装TUF UI..."
-		sed -i 's/3e030d/3e2902/g;s/91071f/92650F/g;s/680516/D0982C/g;s/cf0a2c/c58813/g;s/700618/74500b/g;s/530412/92650F/g' /tmp/shadowsocks/rog/res/shadowsocks.css >/dev/null 2>&1
-		cp -rf /tmp/shadowsocks/rog/res/shadowsocks.css /koolshare/res/
-	fi
-
-	if [ "${UI_TYPE}" == "ASUSWRT" ];then
-		echo_date "为插件安装ASUSWRT UI..."
-	fi
+	set_skin
 
 	# restore backup
 	if [ -n "$(ls /tmp/ss_backup/P*.sh 2>/dev/null)" ];then
@@ -308,7 +269,7 @@ install_now(){
 	[ -z "$(dbus get ss_basic_interval)" ] && dbus set ss_basic_interval=2
 
 	# 设置v2ray 版本号
-	dbus set ss_basic_v2ray_version="v4.22.0"
+	dbus set ss_basic_v2ray_version="v4.44.0"
 
 	# dbus value
 	echo_date "设置插件安装参数..."

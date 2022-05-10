@@ -63,7 +63,6 @@ var option_headkcp = [["none", "不伪装"], ["srtp", "伪装视频通话(srtp)"
 var heart_count = 1;
 const pattern=/[`~!@#$^&*()=|{}':;'\\\[\]\.<>\/?~！@#￥……&*（）——|{}%【】'；：""'。，、？\s]/g;
 
-
 function init() {
 	show_menu(menu_hook);
 	get_dbus_data();
@@ -218,35 +217,57 @@ function refresh_options() {
 
 	for (var field in confs) {
 		var c = confs[field];
-		if (c.rss_protocol) {
-			if (c.group) {
+		if (c.group) {
+			var real_group = c.group.split("_")[0];
+			if (c.rss_protocol) {
 				option.append($("<option>", {
 					value: field,
-					text: c.use_kcp == "1" ? "【SSR+KCP】" + c.group + " - " + c.name : "【SSR】" + c.group + " - " + c.name
+					text: c.use_kcp == "1" ? "【SSR+KCP】" + real_group + " - " + c.name : "【SSR】" + real_group + " - " + c.name
 				}));
 			} else {
+				if (c.koolgame_udp == "0" || c.koolgame_udp == "1") {
+					option.append($("<option>", {
+						value: field,
+						text: c.use_kcp == "1" ? "【koolgame+KCP】" + real_group + " - " + c.name : "【koolgame】" + real_group + " - " + c.name
+					}));
+				} else {
+					if(c["v2ray_use_json"] == "0" || c["v2ray_use_json"] == "1") {
+						option.append($("<option>", {
+							value: field,
+							text: c.use_kcp == "1" ? "【V2+KCP】" + real_group + " - " + c.name : "【V2】" + real_group + " - " + c.name
+						}));
+					}else{
+						option.append($("<option>", {
+							value: field,
+							text: c.use_kcp == "1" ? "【SS+KCP】" + real_group + " - " + c.name : "【SS】" + real_group + " - " + c.name
+						}));
+					}
+				}
+			}
+		} else {
+			if (c.rss_protocol) {
 				option.append($("<option>", {
 					value: field,
 					text: c.use_kcp == "1" ? "【SSR+KCP】" + c.name : "【SSR】" + c.name
 				}));
-			}
-		} else {
-			if (c.koolgame_udp == "0" || c.koolgame_udp == "1") {
-				option.append($("<option>", {
-					value: field,
-					text: c.use_kcp == "1" ? "【koolgame+KCP】" + c.name : "【koolgame】" + c.name
-				}));
 			} else {
-				if(c["v2ray_use_json"] == "0" || c["v2ray_use_json"] == "1") {
+				if (c.koolgame_udp == "0" || c.koolgame_udp == "1") {
 					option.append($("<option>", {
 						value: field,
-						text: c.use_kcp == "1" ? "【V2Ray+KCP】" + c.name : "【V2Ray】" + c.name
+						text: c.use_kcp == "1" ? "【koolgame+KCP】" + c.name : "【koolgame】" + c.name
 					}));
-				}else{
-					option.append($("<option>", {
-						value: field,
-						text: c.use_kcp == "1" ? "【SS+KCP】" + c.name : "【SS】" + c.name
-					}));
+				} else {
+					if(c["v2ray_use_json"] == "0" || c["v2ray_use_json"] == "1") {
+						option.append($("<option>", {
+							value: field,
+							text: c.use_kcp == "1" ? "【V2+KCP】" + c.name : "【V2】" + c.name
+						}));
+					}else{
+						option.append($("<option>", {
+							value: field,
+							text: c.use_kcp == "1" ? "【SS+KCP】" + c.name : "【SS】" + c.name
+						}));
+					}
 				}
 			}
 		}
@@ -263,7 +284,7 @@ function save() {
 	E("ss_state3").innerHTML = "国内连接 - " + "Waiting...";
 	//key define
 	var params_input = ["ss_failover_s1", "ss_failover_s2_1", "ss_failover_s2_2", "ss_failover_s3_1", "ss_failover_s3_2", "ss_failover_s4_1", "ss_failover_s4_2", "ss_failover_s4_3", "ss_failover_s5", "ss_basic_interval", "ss_basic_row", "ss_basic_ping_node", "ss_basic_ping_method", "ss_dns_china", "ss_dns_china_user", "ss_foreign_dns", "ss_dns2socks_user", "ss_chinadns_user", "ss_chinadns1_user", "ss_sstunnel_user", "ss_direct_user", "ss_game2_dns_foreign", "ss_game2_dns2ss_user", "ss_basic_kcp_lserver", "ss_basic_kcp_lport", "ss_basic_kcp_server", "ss_basic_kcp_port", "ss_basic_kcp_parameter", "ss_basic_rule_update", "ss_basic_rule_update_time", "ssr_subscribe_mode", "ssr_subscribe_obfspara", "ssr_subscribe_obfspara_val", "ss_basic_online_links_goss", "ss_basic_node_update", "ss_basic_node_update_day", "ss_basic_node_update_hr", "ss_basic_exclude", "ss_basic_include", "ss_base64_links", "ss_acl_default_port", "ss_acl_default_mode", "ss_basic_kcp_method", "ss_basic_kcp_password", "ss_basic_kcp_mode", "ss_basic_kcp_encrypt", "ss_basic_kcp_mtu", "ss_basic_kcp_sndwnd", "ss_basic_kcp_rcvwnd", "ss_basic_kcp_conn", "ss_basic_kcp_extra", "ss_basic_udp_software", "ss_basic_udp_node", "ss_basic_udpv1_lserver", "ss_basic_udpv1_lport", "ss_basic_udpv1_rserver", "ss_basic_udpv1_rport", "ss_basic_udpv1_password", "ss_basic_udpv1_mode", "ss_basic_udpv1_duplicate_nu", "ss_basic_udpv1_duplicate_time", "ss_basic_udpv1_jitter", "ss_basic_udpv1_report", "ss_basic_udpv1_drop", "ss_basic_udpv2_lserver", "ss_basic_udpv2_lport", "ss_basic_udpv2_rserver", "ss_basic_udpv2_rport", "ss_basic_udpv2_password", "ss_basic_udpv2_fec", "ss_basic_udpv2_timeout", "ss_basic_udpv2_mode", "ss_basic_udpv2_report", "ss_basic_udpv2_mtu", "ss_basic_udpv2_jitter", "ss_basic_udpv2_interval", "ss_basic_udpv2_drop", "ss_basic_udpv2_other", "ss_basic_udp2raw_lserver", "ss_basic_udp2raw_lport", "ss_basic_udp2raw_rserver", "ss_basic_udp2raw_rport", "ss_basic_udp2raw_password", "ss_basic_udp2raw_rawmode", "ss_basic_udp2raw_ciphermode", "ss_basic_udp2raw_authmode", "ss_basic_udp2raw_lowerlevel", "ss_basic_udp2raw_other", "ss_basic_udp_upstream_mtu", "ss_basic_udp_upstream_mtu_value", "ss_reboot_check", "ss_basic_week", "ss_basic_day", "ss_basic_inter_min", "ss_basic_inter_hour", "ss_basic_inter_day", "ss_basic_inter_pre", "ss_basic_time_hour", "ss_basic_time_min", "ss_basic_tri_reboot_time", "ss_basic_server_resolver", "ss_basic_server_resolver_user"];
-	var params_check = ["ss_failover_enable", "ss_failover_c1", "ss_failover_c2", "ss_failover_c3", "ss_basic_tablet", "ss_basic_dragable", "ss_basic_qrcode", "ss_basic_enable", "ss_basic_gfwlist_update", "ss_basic_tfo", "ss_basic_tnd", "ss_basic_chnroute_update", "ss_basic_cdn_update", "ss_basic_kcp_nocomp", "ss_basic_udp_boost_enable", "ss_basic_udpv1_disable_filter", "ss_basic_udpv2_disableobscure", "ss_basic_udpv2_disablechecksum", "ss_basic_udp2raw_boost_enable", "ss_basic_udp2raw_a", "ss_basic_udp2raw_keeprule", "ss_basic_dns_hijack", "ss_basic_mcore"];
+	var params_check = ["ss_failover_enable", "ss_failover_c1", "ss_failover_c2", "ss_failover_c3", "ss_basic_tablet", "ss_basic_dragable", "ss_basic_qrcode", "ss_basic_enable", "ss_basic_gfwlist_update", "ss_basic_tfo", "ss_basic_tnd", "ss_basic_vcore", "ss_basic_xguard", "ss_basic_chnroute_update", "ss_basic_cdn_update", "ss_basic_kcp_nocomp", "ss_basic_udp_boost_enable", "ss_basic_udpv1_disable_filter", "ss_basic_udpv2_disableobscure", "ss_basic_udpv2_disablechecksum", "ss_basic_udp2raw_boost_enable", "ss_basic_udp2raw_a", "ss_basic_udp2raw_keeprule", "ss_basic_dns_hijack", "ss_basic_mcore"];
 	var params_base64_a = ["ss_dnsmasq", "ss_wan_white_ip", "ss_wan_white_domain", "ss_wan_black_ip", "ss_wan_black_domain", "ss_online_links"];
 	var params_base64_b = ["ss_basic_custom"];
 	//---------------------------------------------------------------
@@ -678,7 +699,7 @@ function Add_profile() { //点击节点页面内添加节点动作
 	E("edit_node").style.display = "none";
 	E("continue_add").style.display = "";
 	$("#vpnc_settings").fadeIn(300);
-	$(".contentM_qis").css("top", nodeH - 280 + "px");
+	$(".contentM_qis").css("top", nodeH - 580 + "px");
 }
 function cancel_add_rule() { //点击添加节点面板上的返回
 	$("#vpnc_settings").fadeOut(300);
@@ -2754,12 +2775,13 @@ function close_proc_status() {
 	$("#detail_status").fadeOut(200);
 }
 function get_proc_status() {
+	$('#proc_status').val("请稍后，正在获取状态中...");
 	$("#detail_status").fadeIn(500);
 	var id = parseInt(Math.random() * 100000000);
 	var postData = {"id": id, "method": "ss_proc_status.sh", "params":[], "fields": ""};
 	$.ajax({
 		type: "POST",
-		cache:false,
+		cache: false,
 		url: "/_api/",
 		data: JSON.stringify(postData),
 		dataType: "json",
@@ -2873,7 +2895,7 @@ function save_failover() {
 }
 </script>
 </head>
-<body onload="init();">
+<body id="app" skin='<% nvram_get("sc_skin"); %>' onload="init();">
 <div id="TopBanner"></div>
 <div id="Loading" class="popup_bg"></div>
 <div id="LoadingBar" class="popup_bar_bg_ks" style="z-index: 200;" >
@@ -2914,7 +2936,14 @@ function save_failover() {
 											<img id="return_btn" onclick="reload_Soft_Center();" align="right" style="cursor:pointer;position:absolute;margin-left:-30px;margin-top:-25px;" title="返回软件中心" src="/images/backprev.png" onMouseOver="this.src='/images/backprevclick.png'" onMouseOut="this.src='/images/backprev.png'"></img>
 										</div>
 										<div style="margin:10px 0 10px 5px;" class="splitLine"></div>
-										<div class="SimpleNote" id="head_illustrate">本插件是支持<a href="https://github.com/shadowsocks/shadowsocks-libev" target="_blank"><em><u>SS</u></em></a>、<a href="https://github.com/shadowsocksrr/shadowsocksr-libev" target="_blank"><em><u>SSR</u></em></a>、<a href="http://firmware.koolshare.cn/binary/koolgame/" target="_blank"><em><u>KoolGame</u></em></a>、<a href="https://github.com/v2ray/v2ray-core" target="_blank"><em><u>V2Ray</u></em></a>四种客户端的科学上网、游戏加速工具。</div>
+										<div class="SimpleNote" id="head_illustrate">
+											本插件是支持<a href="https://github.com/shadowsocks/shadowsocks-libev" target="_blank"><em><u>SS</u></em></a>、
+											<a href="https://github.com/shadowsocksrr/shadowsocksr-libev" target="_blank"><em><u>SSR</u></em></a>、
+											<a href="http://firmware.koolshare.cn/binary/koolgame/" target="_blank"><em><u>KoolGame</u></em></a>、
+											<a href="https://github.com/v2ray/v2ray-core" target="_blank"><em><u>V2Ray</u></em></a>、
+											<a href="https://github.com/XTLS/xray-core" target="_blank"><em><u>Xray</u></em></a>
+											五种客户端的科学上网、游戏加速工具。
+										</div>
 										<!-- this is the popup area for process status -->
 										<div id="detail_status"  class="content_status" style="box-shadow: 3px 3px 10px #000;margin-top: -20px;display: none;">
 											<div class="user_title">【科学上网】状态检测</div>
@@ -3509,8 +3538,8 @@ function save_failover() {
 													var ph3 = "多个关键词用英文逗号分隔，如：香港,深圳,NF,BGP";
 													$('#table_subscribe').forms([
 														{ title: 'SSR/v2ray订阅设置', thead:'1'},
-														{ title: '订阅地址管理（支持SSR/v2ray）', id:'ss_online_links', type:'textarea', rows:'8', ph:ph1},
-														{ title: '订阅节点模式设定（SSR/v2ray）', id:'ssr_subscribe_mode', type:'select', style:'width:auto', options:option_modes, value:'2'},
+														{ title: '订阅地址管理<br><br><font color="#ffcc00">支持SS/SSR/v2ray</font>', id:'ss_online_links', type:'textarea', rows:'8', ph:ph1},
+														{ title: '订阅节点模式设定', id:'ssr_subscribe_mode', type:'select', style:'width:auto', options:option_modes, value:'2'},
 														{ title: '订阅节点混淆参数设定（SSR）', multi: [
 															{ id:'ssr_subscribe_obfspara', type:'select', style:'width:auto', func:'u', options:[["0", "留空"], ["1", "使用订阅设定"], ["2", "自定义"]], value:'1'},
 															{ id:'ssr_subscribe_obfspara_val', type:'text', style:'width:350px', maxlen:'300', value:'www.baidu.com'},
@@ -3527,10 +3556,15 @@ function save_failover() {
 															{ suffix:'<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(0)">删除全部节点</a>'},
 															{ suffix:'&nbsp;<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(1)">删除全部订阅节点</a>'},
 														]},
-														{ title: '订阅操作', multi: [
+														{ title: '保存配置', multi: [
 															{ suffix:'<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(2)">仅保存设置</a>'},
-															{ suffix:'&nbsp;<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(3)">保存并订阅</a>'},
 														]},
+														{ title: '节点订阅', hint:'112', multi: [
+															{ suffix:'<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(3)">保存并订阅</a>'},
+														]},
+														//{ title: '快速订阅', hint:'113', multi: [
+														//	{ suffix:'<a type="button" class="ss_btn" style="cursor:pointer" onclick="get_online_nodes(6)">快速订阅</a>'},
+														//]},
 													]);
 												</script>
 											</table>
@@ -3641,6 +3675,8 @@ function save_failover() {
 														{ title: '&nbsp;&nbsp;&nbsp;&nbsp;ss/ssr 开启多核心支持', id:'ss_basic_mcore', help:'108', type:'checkbox', value:true},
 														{ title: '&nbsp;&nbsp;&nbsp;&nbsp;ss-libev / v2ray 开启tcp fast open', id:'ss_basic_tfo', type:'checkbox', value:false},
 														{ title: '&nbsp;&nbsp;&nbsp;&nbsp;ss-libev 开启TCP_NODELAY', id:'ss_basic_tnd', type:'checkbox', value:false},
+														{ title: '&nbsp;&nbsp;&nbsp;&nbsp;用Xray核心替换V2ray', id:'ss_basic_vcore', help:'114', type:'checkbox', value:false},
+														{ title: '&nbsp;&nbsp;&nbsp;&nbsp;Xray启用进程守护', id:'ss_basic_xguard', hint:'115', type:'checkbox', value:false},
 													]);
 												</script> 
 											</table>

@@ -9,8 +9,6 @@ THREAD=$(grep -c '^processor' /proc/cpuinfo)
 dbus set ss_basic_version_local=$(cat /koolshare/ss/version)
 LOG_FILE=/tmp/upload/ss_log.txt
 CONFIG_FILE=/koolshare/ss/ss.json
-V2RAY_CONFIG_FILE_TMP="/tmp/v2ray_tmp.json"
-V2RAY_CONFIG_FILE="/koolshare/ss/v2ray.json"
 LOCK_FILE=/var/lock/koolss.lock
 DNSF_PORT=7913
 DNSC_PORT=53
@@ -29,7 +27,7 @@ OUTBOUNDS="[]"
 
 cmd() {
 	echo_date "$*" 2>&1
-	"$@"
+	"$@" 2>/dev/null
 }
 
 set_lock() {
@@ -40,6 +38,41 @@ set_lock() {
 unset_lock() {
 	flock -u 1000
 	rm -rf "$LOCK_FILE"
+}
+
+set_skin(){
+	local UI_TYPE=ASUSWRT
+	local SC_SKIN=$(nvram get sc_skin)
+	local ROG_FLAG=$(grep -o "680516" /www/form_style.css|head -n1)
+	local TUF_FLAG=$(grep -o "D0982C" /www/form_style.css|head -n1)
+	if [ -n "${ROG_FLAG}" ];then
+		UI_TYPE="ROG"
+	fi
+	if [ -n "${TUF_FLAG}" ];then
+		UI_TYPE="TUF"
+	fi
+	
+	if [ -z "${SC_SKIN}" -o "${SC_SKIN}" != "${UI_TYPE}" ];then
+		echo_date "安装${UI_TYPE}皮肤！"
+		nvram set sc_skin="${UI_TYPE}"
+		nvram commit
+	fi
+}
+
+pre_set(){
+	# set vcore name
+	if [ "${ss_basic_vcore}" == "1" ];then
+		VCORE_NAME=Xray
+		V2RAY_CONFIG_FILE_TMP="/tmp/xray_tmp.json"
+		V2RAY_CONFIG_FILE="/koolshare/ss/xray.json"
+	else
+		VCORE_NAME=V2ray
+		V2RAY_CONFIG_FILE_TMP="/tmp/v2ray_tmp.json"
+		V2RAY_CONFIG_FILE="/koolshare/ss/v2ray.json"
+	fi
+
+	# set skin
+	set_skin
 }
 
 get_lan_cidr() {
@@ -94,7 +127,7 @@ __get_type_full_name() {
 		echo "koolgame"
 		;;
 	3)
-		echo "v2ray"
+		echo "${VCORE_NAME}"
 		;;
 	esac
 }
@@ -111,7 +144,7 @@ __get_type_abbr_name() {
 		echo "koolgame"
 		;;
 	3)
-		echo "v2ray"
+		echo "${VCORE_NAME}"
 		;;
 	esac
 }
@@ -232,6 +265,14 @@ kill_process() {
 		killall v2ray >/dev/null 2>&1
 		kill -9 "$v2ray_process" >/dev/null 2>&1
 	fi
+	xray_process=$(pidof xray)
+	if [ -n "$xray_process" ]; then
+		echo_date 关闭xray进程...
+		[ -f "/koolshare/perp/xray/rc.main" ] && perpctl d xray >/dev/null 2>&1
+		rm -rf /koolshare/perp/xray
+		killall xray >/dev/null 2>&1
+		kill -9 "$xray_process" >/dev/null 2>&1
+	fi
 	ssredir=$(pidof ss-redir)
 	if [ -n "$ssredir" ]; then
 		echo_date 关闭ss-redir进程...
@@ -332,19 +373,23 @@ kill_process() {
 		echo_date 关闭https_dns_proxy进程...
 		killall https_dns_proxy >/dev/null 2>&1
 	fi
-	haveged_process=$(pidof haveged)
-	if [ -n "$haveged_process" ]; then
+	# only close haveged form fancyss, not haveged from system
+	haveged_pid=$(ps |grep "/koolshare/bin/haveged"|grep -v grep|awk '{print $1}')
+	if [ -n "${haveged_pid}" ]; then
 		echo_date 关闭haveged进程...
 		killall haveged >/dev/null 2>&1
 	fi
+
+	# close tcp_fastopen
 	echo 1 >/proc/sys/net/ipv4/tcp_fastopen
 }
 
 # ================================= ss prestart ===========================
 ss_pre_start() {
+	local IS_LOCAL_ADDR=$(echo "${ss_basic_server}" | grep -o "127.0.0.1" 2>/dev/null)
 	if [ "$ss_lb_enable" == "1" ]; then
 		echo_date ---------------------- 【科学上网】 启动前触发脚本 ----------------------
-		if [ $(echo $ss_basic_server | grep -o "127.0.0.1") ] && [ "$ss_basic_port" == "$ss_lb_port" ]; then
+		if [ -n "${IS_LOCAL_ADDR}" -a "${ss_basic_port}" == "${ss_lb_port}" ]; then
 			echo_date 插件启动前触发:触发启动负载均衡功能！
 			#start haproxy
 			sh /koolshare/scripts/ss_lb_config.sh
@@ -352,9 +397,9 @@ ss_pre_start() {
 			echo_date 插件启动前触发:未选择负载均衡节点，不触发负载均衡启动！
 		fi
 	else
-		if [ $(echo $ss_basic_server | grep -o "127.0.0.1") ] && [ "$ss_basic_port" == "$ss_lb_port" ]; then
+		if [ -n "${IS_LOCAL_ADDR}" -a "${ss_basic_port}" == "${ss_lb_port}" ]; then
 			echo_date 插件启动前触发【警告】：你选择了负载均衡节点，但是负载均衡开关未启用！！
-			#else
+		#else
 			#echo_date ss启动前触发：你选择了普通节点，不触发负载均衡启动！
 		fi
 	fi
@@ -526,7 +571,7 @@ get_dns_name() {
 		echo "https_dns_proxy"
 		;;
 	7)
-		echo "v2ray dns"
+		echo "${VCORE_NAME} dns"
 		;;
 	8)
 		echo "koolgame内置"
@@ -642,7 +687,7 @@ start_dns() {
 				ss-tunnel -c $CONFIG_FILE -l $DNSF_PORT -L $ss_sstunnel_user $ARG_OBFS -u -f /var/run/sstunnel.pid >/dev/null 2>&1
 			fi
 		elif [ "$ss_basic_type" == "3" ]; then
-			echo_date V2ray下不支持ss-tunnel，改用dns2socks！
+			echo_date $(__get_type_full_name $ss_basic_type)下不支持ss-tunnel，改用dns2socks！
 			dbus set ss_foreign_dns=3
 			start_sslocal
 			[ "$DNS_PLAN" == "1" ] && echo_date "开启dns2socks，用于【国外gfwlist站点】的DNS解析..."
@@ -701,7 +746,7 @@ start_dns() {
 			# ss服务器可能是域名且没有正确解析
 			ss_real_server_ip="8.8.8.8"
 		fi
-		https_dns_proxy -u nobody -p $DNSF_PORT -b 1.1.1.1,1.0.0.1 -x -4 -e $ss_real_server_ip/16 -r "https://cloudflare-dns.com/dns-query" -d
+		https_dns_proxy -u nobody -p $DNSF_PORT -b 8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37 -e $ss_real_server_ip/16 -r "https://cloudflare-dns.com/dns-query?ct=application/dns-json&" -d
 	fi
 
 	# start v2ray DNSF_PORT
@@ -709,7 +754,7 @@ start_dns() {
 		if [ "$ss_basic_type" == "3" ]; then
 			return 0
 		else
-			echo_date $(__get_type_full_name $ss_basic_type)下不支持v2ray dns，改用dns2socks！
+			echo_date $(__get_type_full_name $ss_basic_type)下不支持${VCORE_NAME} dns，改用dns2socks！
 			dbus set ss_foreign_dns=3
 			start_sslocal
 			[ "$DNS_PLAN" == "1" ] && echo_date "开启dns2socks，用于【国外gfwlist站点】的DNS解析..."
@@ -1340,7 +1385,7 @@ creat_v2ray_json() {
 	rm -rf "$V2RAY_CONFIG_FILE_TMP"
 	rm -rf "$V2RAY_CONFIG_FILE"
 	if [ "$ss_basic_v2ray_use_json" == "0" ]; then
-		echo_date 生成V2Ray配置文件...
+		echo_date 生成${VCORE_NAME}配置文件...
 		local kcp="null"
 		local tcp="null"
 		local ws="null"
@@ -1439,13 +1484,13 @@ creat_v2ray_json() {
 			{
 			"log": {
 				"access": "/dev/null",
-				"error": "/tmp/v2ray_log.log",
+				"error": "/tmp/${VCORE_NAME}_log.log",
 				"loglevel": "error"
 			},
 		EOF
 		# inbounds area (7913 for dns resolve)
 		if [ "$ss_foreign_dns" == "7" ]; then
-			echo_date 配置v2ray dns，用于dns解析...
+			echo_date 配置${VCORE_NAME} dns，用于dns解析...
 			cat >>"$V2RAY_CONFIG_FILE_TMP" <<-EOF
 				"inbounds": [
 					{
@@ -1537,11 +1582,11 @@ creat_v2ray_json() {
 			]
 			}
 		EOF
-		echo_date 解析V2Ray配置文件...
+		echo_date 解析${VCORE_NAME}配置文件...
 		cat "$V2RAY_CONFIG_FILE_TMP" | jq --tab . >"$V2RAY_CONFIG_FILE"
-		echo_date V2Ray配置文件写入成功到"$V2RAY_CONFIG_FILE"
-	elif [ "$ss_basic_v2ray_use_json" == "1" ]; then
-		echo_date 使用自定义的v2ray json配置文件...
+		echo_date ${VCORE_NAME}配置文件写入成功到"$V2RAY_CONFIG_FILE"
+	elif [ "$ss_basic_v2ray_use_json" == "1" ];then
+		echo_date 使用自定义的${VCORE_NAME} json配置文件...
 		echo "$ss_basic_v2ray_json" | base64_decode >"$V2RAY_CONFIG_FILE_TMP"
 		local OB=$(cat "$V2RAY_CONFIG_FILE_TMP" | jq .outbound)
 		local OBS=$(cat "$V2RAY_CONFIG_FILE_TMP" | jq .outbounds)
@@ -1553,14 +1598,14 @@ creat_v2ray_json() {
 		
 		# 新格式：outbound[]
 		if [ "$OBS" != "null" ]; then
-			OUTBOUNDS=$(cat "$V2RAY_CONFIG_FILE_TMP" | jq .outbounds[])
+			OUTBOUNDS=$(cat "$V2RAY_CONFIG_FILE_TMP" | jq .outbounds[0])
 		fi
 		
 		if [ "$ss_foreign_dns" == "7" ]; then
 			local TEMPLATE="{
 								\"log\": {
 									\"access\": \"/dev/null\",
-									\"error\": \"/tmp/v2ray_log.log\",
+									\"error\": \"/tmp/${VCORE_NAME}_log.log\",
 									\"loglevel\": \"error\"
 								},
 								\"inbounds\": [
@@ -1590,7 +1635,7 @@ creat_v2ray_json() {
 			local TEMPLATE="{
 								\"log\": {
 									\"access\": \"/dev/null\",
-									\"error\": \"/tmp/v2ray_log.log\",
+									\"error\": \"/tmp/${VCORE_NAME}_log.log\",
 									\"loglevel\": \"error\"
 								},
 								\"inbounds\": [
@@ -1618,14 +1663,14 @@ creat_v2ray_json() {
 								]
 							}"
 		fi
-		echo_date 解析V2Ray配置文件...
+		echo_date 解析${VCORE_NAME}配置文件...
 		echo $TEMPLATE | jq --argjson args "$OUTBOUNDS" '. + {outbounds: [$args]}' >"$V2RAY_CONFIG_FILE"
-		echo_date V2Ray配置文件写入成功到"$V2RAY_CONFIG_FILE"
+		echo_date ${VCORE_NAME}配置文件写入成功到"$V2RAY_CONFIG_FILE"
 
 		# 检测用户json的服务器ip地址
 		v2ray_protocal=$(cat "$V2RAY_CONFIG_FILE" | jq -r .outbounds[0].protocol)
 		case $v2ray_protocal in
-		vmess)
+		vmess|vless)
 			v2ray_server=$(cat "$V2RAY_CONFIG_FILE" | jq -r .outbounds[0].settings.vnext[0].address)
 			;;
 		socks)
@@ -1645,17 +1690,17 @@ creat_v2ray_json() {
 			# 判断服务器域名格式
 			tmp=$(__valid_ip "$v2ray_server")
 			if [ $? == 0 ]; then
-				echo_date "检测到你的json配置的v2ray服务器是：$v2ray_server"
+				echo_date "检测到你的json配置的${VCORE_NAME}服务器是：$v2ray_server"
 				ss_basic_server_ip="$v2ray_server"
 			else
-				echo_date "检测到你的json配置的v2ray服务器：【$v2ray_server】不是ip格式！"
-				echo_date "尝试解析v2ray服务器的ip地址，使用DNS：$(__get_server_resolver):$(__get_server_resolver_port)"
+				echo_date "检测到你的json配置的${VCORE_NAME}服务器：【$v2ray_server】不是ip格式！"
+				echo_date "尝试解析${VCORE_NAME}服务器的ip地址，使用DNS：$(__get_server_resolver):$(__get_server_resolver_port)"
 				echo_date "如果此处等待时间较久，建议在【节点域名解析DNS服务器】处更换DNS服务器..."
 				v2ray_server_ip=$(__resolve_ip "$v2ray_server")
 				case $? in
 				0)
 					# server is domain format and success resolved.
-					echo_date "v2ray服务器的ip地址解析成功：$v2ray_server_ip"
+					echo_date "${VCORE_NAME}服务器的ip地址解析成功：$v2ray_server_ip"
 					# 解析并记录一次ip，方便插件触发重启设定工作
 					echo "address=/$v2ray_server/$v2ray_server_ip" >/tmp/ss_host.conf
 					# 去掉此功能，以免ip发生变更导致问题，或者影响域名对应的其它二级域名
@@ -1665,37 +1710,43 @@ creat_v2ray_json() {
 				1)
 					# server is domain format and failed to resolve.
 					unset ss_basic_server_ip
-					echo_date "v2ray服务器的ip地址解析失败!插件将继续运行，域名解析将由v2ray自己进行！"
-					echo_date "请自行将v2ray服务器的ip地址填入IP/CIDR白名单中!"
-					echo_date "为了确保v2ray的正常工作，建议配置ip格式的v2ray服务器地址！"
+					echo_date "${VCORE_NAME}服务器的ip地址解析失败!插件将继续运行，域名解析将由${VCORE_NAME}自己进行！"
+					echo_date "请自行将${VCORE_NAME}服务器的ip地址填入IP/CIDR白名单中!"
+					echo_date "为了确保${VCORE_NAME}的正常工作，建议配置ip格式的${VCORE_NAME}服务器地址！"
 					;;
 				2)
 					# server is not ip either domain!
-					echo_date "错误！！检测到json配置内的v2ray服务器既不是ip地址，也不是域名格式！"
+					echo_date "错误！！检测到json配置内的${VCORE_NAME}服务器既不是ip地址，也不是域名格式！"
 					echo_date "请更正你的错误然后重试！！"
 					close_in_five
 					;;
 				esac
 			fi
+			# write v2ray server
+			dbus set ssconf_basic_server_${ssconf_basic_node}=${v2ray_server}
 		else
 			echo_date "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-			echo_date "+       没有检测到你的v2ray服务器地址，如果你确定你的配置是正确的        +"
-			echo_date "+   请自行将v2ray服务器的ip地址填入【IP/CIDR】黑名单中，以确保正常使用   +"
+			echo_date "+       没有检测到你的${VCORE_NAME}服务器地址，如果你确定你的配置是正确的        +"
+			echo_date "+   请自行将${VCORE_NAME}服务器的ip地址填入【IP/CIDR】黑名单中，以确保正常使用   +"
 			echo_date "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 		fi
 	fi
 
-	echo_date 测试V2Ray配置文件.....
-	cd /koolshare/bin
-	result=$(v2ray -test -config="$V2RAY_CONFIG_FILE" | grep "Configuration OK.")
-	if [ -n "$result" ]; then
-		echo_date $result
-		echo_date V2Ray配置文件通过测试!!!
+	if [ "${ss_basic_vcore}" == "1" ];then
+		echo_date 当前核心为${VCORE_NAME}，不进行配置文件测试....
 	else
-		echo_date V2Ray配置文件没有通过测试，请检查设置!!!
-		rm -rf "$V2RAY_CONFIG_FILE_TMP"
-		rm -rf "$V2RAY_CONFIG_FILE"
-		close_in_five
+		echo_date 测试${VCORE_NAME}配置文件....
+		cd /koolshare/bin
+		result=$(v2ray -test -config="$V2RAY_CONFIG_FILE" | grep "Configuration OK.")
+		if [ -n "$result" ]; then
+			echo_date $result
+			echo_date ${VCORE_NAME}配置文件通过测试!!!
+		else
+			echo_date ${VCORE_NAME}配置文件没有通过测试，请检查设置!!!
+			rm -rf "$V2RAY_CONFIG_FILE_TMP"
+			rm -rf "$V2RAY_CONFIG_FILE"
+			close_in_five
+		fi
 	fi
 }
 
@@ -1705,32 +1756,68 @@ start_v2ray() {
 		echo_date 开启tcp fast open支持.
 		echo 3 >/proc/sys/net/ipv4/tcp_fastopen
 	fi
-
-	# v2ray start
-	cd /koolshare/bin
-	#export GOGC=30
-	v2ray --config=/koolshare/ss/v2ray.json >/dev/null 2>&1 &
-	local V2PID
-	local i=10
-	until [ -n "$V2PID" ]; do
-		i=$(($i - 1))
-		V2PID=$(pidof v2ray)
-		if [ "$i" -lt 1 ]; then
-			echo_date "v2ray进程启动失败！"
-			close_in_five
+	if [ "${ss_basic_vcore}" == "1" ];then
+		# xray start
+		if [ "${ss_basic_xguard}" == "1" ];then
+			echo_date "开启Xray主进程 + Xray守护..."
+			# use perp to start xray
+			mkdir -p /koolshare/perp/xray/
+			cat >/koolshare/perp/xray/rc.main <<-EOF
+				#!/bin/sh
+				source /koolshare/scripts/base.sh
+				CMD="xray run -c /koolshare/ss/xray.json"
+				
+				exec 2>&1
+				exec \$CMD
+				
+			EOF
+			chmod +x /koolshare/perp/xray/rc.main
+			chmod +t /koolshare/perp/xray/
+			perpctl -u xray >/dev/null 2>&1
+		else
+			echo_date "开启Xray主进程..."
+			cd /koolshare/bin
+			xray run -c $V2RAY_CONFIG_FILE >/dev/null 2>&1 &
 		fi
-		usleep 250000
-	done
-	echo_date v2ray启动成功，pid：$V2PID
+		local XPID
+		local i=25
+		until [ -n "$XPID" ]; do
+			i=$(($i - 1))
+			XPID=$(pidof xray)
+			if [ "$i" -lt 1 ]; then
+				echo_date "${VCORE_NAME}进程启动失败！"
+				close_in_five
+			fi
+			usleep 250000
+		done
+		echo_date ${VCORE_NAME}启动成功，pid：$XPID
+	else
+		# v2ray start
+		echo_date "开启V2ray主进程..."
+		cd /koolshare/bin
+		v2ray --config=$V2RAY_CONFIG_FILE >/dev/null 2>&1 &
+		local V2PID
+		local i=25
+		until [ -n "$V2PID" ]; do
+			i=$(($i - 1))
+			V2PID=$(pidof v2ray)
+			if [ "$i" -lt 1 ]; then
+				echo_date "${VCORE_NAME}进程启动失败！"
+				close_in_five
+			fi
+			usleep 250000
+		done
+		echo_date ${VCORE_NAME}启动成功，pid：$V2PID
+	fi
 }
 
 write_cron_job() {
 	sed -i '/ssupdate/d' /var/spool/cron/crontabs/* >/dev/null 2>&1
 	if [ "1" == "$ss_basic_rule_update" ]; then
-		echo_date 添加ss规则定时更新任务，每天"$ss_basic_rule_update_time"自动检测更新规则.
+		echo_date 添加fancyss规则定时更新任务，每天"$ss_basic_rule_update_time"自动检测更新规则.
 		cru a ssupdate "0 $ss_basic_rule_update_time * * * /bin/sh /koolshare/scripts/ss_rule_update.sh"
 	else
-		echo_date ss规则定时更新任务未启用！
+		echo_date fancyss规则定时更新任务未启用！
 	fi
 	sed -i '/ssnodeupdate/d' /var/spool/cron/crontabs/* >/dev/null 2>&1
 	if [ "$ss_basic_node_update" = "1" ]; then
@@ -1746,7 +1833,7 @@ write_cron_job() {
 
 kill_cron_job() {
 	if [ -n "$(cru l | grep ssupdate)" ]; then
-		echo_date 删除ss规则定时更新任务...
+		echo_date 删除fancyss规则定时更新任务...
 		sed -i '/ssupdate/d' /var/spool/cron/crontabs/* >/dev/null 2>&1
 	fi
 	if [ -n "$(cru l | grep ssnodeupdate)" ]; then
@@ -1766,7 +1853,8 @@ load_tproxy() {
 
 	for MODULE in $MODULES; do
 		if ! checkmoduleisloaded; then
-			insmod /lib/modules/${OS}/kernel/net/netfilter/${MODULE}.ko
+			#insmod /lib/modules/${OS}/kernel/net/netfilter/${MODULE}.ko
+			modprobe ${MODULE}.ko
 		fi
 	done
 
@@ -1824,9 +1912,9 @@ flush_nat() {
 	ipset -F router >/dev/null 2>&1 && ipset -X router >/dev/null 2>&1
 	#remove_redundant_rule
 	ip_rule_exist=$(ip rule show | grep "lookup 310" | grep -c 310)
-	if [ -n "ip_rule_exist" ]; then
+	if [ -n "${ip_rule_exist}" ]; then
 		#echo_date 清除重复的ip rule规则.
-		until [ "$ip_rule_exist" == "0" ]; do
+		until [ "${ip_rule_exist}" == "0" ]; do
 			IP_ARG=$(ip rule show | grep "lookup 310" | head -n 1 | cut -d " " -f3,4,5,6)
 			ip rule del $IP_ARG
 			ip_rule_exist=$(expr $ip_rule_exist - 1)
@@ -2102,14 +2190,16 @@ chromecast() {
 # -----------------------------------nat part end--------------------------------------------------------
 
 restart_dnsmasq() {
-	# use use local dns as system resolver
+	# 如果是梅林固件，需要将 【Tool - Other Settings  - Advanced Tweaks and Hacks - Wan: Use local caching DNS server as system resolver (default: No)】此处设置为【是】
+	# 这将确保固件自身的DNS解析使用127.0.0.1，而不是上游的DNS。否则插件的状态检测将无法解析谷歌，导致状态检测失败。
 	local DLC=$(nvram get dns_local_cache)
 	if [ "$DLC" == "0" ]; then
 		nvram set dns_local_cache=1
 		nvram commit
 	fi
-	# 这是个官改固件
-	if [ -z "$DLC" ]; then
+	# 从梅林刷到官改固件，如果不重置固件，则dns_local_cache将会保留，会导致误判，所以需要改写一次以确保OK
+	local LOCAL_DNS=$(cat /etc/resolv.conf|grep "127.0.0.1")
+	if [ -z "$LOCAL_DNS" ]; then
 		cat >/etc/resolv.conf <<-EOF
 			nameserver 127.0.0.1
 		EOF
@@ -2142,12 +2232,22 @@ write_numbers() {
 set_sys() {
 	# set_ulimit
 	ulimit -n 16384
+
+	# mem
 	echo 1 >/proc/sys/vm/overcommit_memory
 
 	# more entropy
 	# use command `cat /proc/sys/kernel/random/entropy_avail` to check current entropy
-	echo_date "启动haveged，为系统提供更多的可用熵！"
-	haveged -w 1024 >/dev/null 2>&1	
+	# few scenario should be noticed below:
+	# 1. from merlin fw 386.2, jitterentropy-rngd has been intergrated into fw, so havege form fancyss should not be used
+	# 2. from merlin fw 386.4, jitterentropy-rngd was replaced by haveged, so havege form fancyss should not be used
+	# 3. newer asus fw or asus_ks_mod fw like GT-AX6000 use jitterentropy-rngd, so havege form fancyss should not be used
+	# 4. older merlin or asus_ks_mod fw do not have jitterentropy-rngd or haveged, so havege form fancyss should be used
+	if [ -z "$(pidof jitterentropy-rngd)" -a -z "$(pidof haveged)" -a -f "/koolshare/bin/haveged" ];then
+		# run haveged form fancyss only there are not entropy software running
+		echo_date "启动haveged，为系统提供更多的可用熵！"
+		/koolshare/bin/haveged -w 1024 >/dev/null 2>&1
+	fi
 }
 
 remove_ss_reboot_job() {
@@ -2274,16 +2374,16 @@ detect() {
 		fi
 	fi
 
-	#检测v2ray模式下是否启用虚拟内存
+	#检测v2ray/xray模式下是否启用虚拟内存
 	if [ "$ss_basic_type" == "3" -a -z "$WAN_ACTION" ]; then
 		if [ "$MODEL" == "RT-AC86U" -o "$MODEL" == "TUF-AX3000" ]; then
 			SWAPSTATUS=$(free | grep Swap | awk '{print $2}')
 			if [ "$SWAPSTATUS" != "0" ]; then
-				echo_date "你选择了v2ray节点，当前系统已经启用虚拟内存！！符合启动条件！"
+				echo_date "你选择了${VCORE_NAME}节点，当前系统已经启用虚拟内存！！符合启动条件！"
 			else
 				echo_date "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-				echo_date "+          你选择了v2ray节点，而当前系统未启用虚拟内存！               +"
-				echo_date "+        v2ray程序对路由器开销极大，请挂载虚拟内存后再开启！            +"
+				echo_date "+          你选择了${VCORE_NAME}节点，而当前系统未启用虚拟内存！               +"
+				echo_date "+        ${VCORE_NAME}程序对路由器开销极大，请挂载虚拟内存后再开启！            +"
 				echo_date "+       如果使用 ws + tls + web 方案，建议1G虚拟内存，以保证稳定！     +"
 				echo_date "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 				close_in_five
@@ -2300,71 +2400,15 @@ detect() {
 		nvram unset dhcp_dns2_x
 		nvram commit
 	fi
-}
 
-mount_dnsmasq() {
-	killall dnsmasq >/dev/null 2>&1
-	mount --bind /koolshare/bin/dnsmasq /usr/sbin/dnsmasq
-}
-
-umount_dnsmasq() {
-	killall dnsmasq >/dev/null 2>&1
-	umount /usr/sbin/dnsmasq
-}
-
-mount_dnsmasq_now() {
-	local MOUNTED=$(mount | grep -o dnsmasq)
-	case $ss_basic_dnsmasq_fastlookup in
-	0)
-		if [ -n "$MOUNTED" ]; then
-			echo_date "【dnsmasq替换】：从dnsmasq-fastlookup切换为原版dnsmasq"
-			umount_dnsmasq
-		fi
-		;;
-	1 | 3)
-		if [ -n "$MOUNTED" ]; then
-			echo_date "【dnsmasq替换】：dnsmasq-fastlookup已经替换过了！"
+	# info
+	if [ "${ss_basic_type}" == "3" ];then
+		if [ "${ss_basic_vcore}" == "1" ];then
+			echo_date "ℹ️使用Xray-core替换V2ray-core..."
 		else
-			echo_date "【dnsmasq替换】：用dnsmasq-fastlookup替换原版dnsmasq！"
-			mount_dnsmasq
+			echo_date "ℹ️使用V2ray-core..."
 		fi
-		;;
-	2)
-		if [ -L "/jffs/configs/dnsmasq.d/cdn.conf" ]; then
-			if [ -z "$MOUNTED" ]; then
-				echo_date "【dnsmasq替换】：检测到cdn.conf，用dnsmasq-fastlookup替换原版dnsmasq！"
-				mount_dnsmasq
-			fi
-		else
-			if [ -n "$MOUNTED" ]; then
-				echo_date "【dnsmasq替换】：没有检测到cdn.conf，从dnsmasq-fastlookup切换为原版dnsmasq"
-				umount_dnsmasq
-			else
-				echo_date "【dnsmasq替换】：没有检测到cdn.conf，不替换dnsmasq-fastlookup"
-			fi
-		fi
-		;;
-	esac
-}
-
-umount_dnsmasq_now() {
-	local MOUNTED=$(mount | grep -o dnsmasq)
-	case $ss_basic_dnsmasq_fastlookup in
-	0 | 1 | 2)
-		if [ -n "$MOUNTED" ]; then
-			echo_date "【dnsmasq替换】：从dnsmasq-fastlookup切换为原版dnsmasq"
-			umount_dnsmasq
-		fi
-		;;
-	3)
-		if [ -n "$MOUNTED" ]; then
-			echo_date "【dnsmasq替换】：dnsmasq-fastlookup已经替换过了，插件关闭后保持替换！"
-		else
-			echo_date "【dnsmasq替换】：用dnsmasq-fastlookup替换原版dnsmasq！且插件关闭后保持替换！"
-			mount_dnsmasq
-		fi
-		;;
-	esac
+	fi
 }
 
 httping_check() {
@@ -2413,13 +2457,13 @@ disable_ss() {
 	echo_date ======================= 梅林固件 - 【科学上网】 ========================
 	echo_date
 	echo_date ------------------------- 关闭【科学上网】 -----------------------------
+	pre_set
 	dbus remove ss_basic_server_ip
 	stop_status
 	kill_process
 	remove_ss_trigger_job
 	remove_ss_reboot_job
 	restore_conf
-	umount_dnsmasq_now
 	restart_dnsmasq
 	flush_nat
 	kill_cron_job
@@ -2432,13 +2476,13 @@ apply_ss() {
 	echo_date ======================= 梅林固件 - 【科学上网】 ========================
 	echo_date
 	echo_date ------------------------- 启动【科学上网】 -----------------------------
+	pre_set
 	stop_status
 	kill_process
 	remove_ss_trigger_job
 	remove_ss_reboot_job
 	restore_conf
 	# restart dnsmasq when ss server is not ip or on router boot
-	umount_dnsmasq_now
 	restart_dnsmasq
 	flush_nat
 	kill_cron_job
@@ -2465,7 +2509,6 @@ apply_ss() {
 	#===load nat start===
 	load_nat
 	#===load nat end===
-	mount_dnsmasq_now
 	restart_dnsmasq
 	auto_start
 	write_cron_job

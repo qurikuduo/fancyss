@@ -7,6 +7,7 @@ adcdownload.apple.com
 adcdownload.apple.com.akadns.net
 appldnld.apple.com
 appldnld.g.aaplimg.com
+appleid.cdn-apple.com
 apps.apple.com
 apps.mzstatic.com
 cdn1.apple-mapkit.com
@@ -24,7 +25,6 @@ cds-cdn.v.aaplimg.com
 cl1.apple.com
 cl1-cdn.origin-apple.com.akadns.net
 cl2.apple.com
-cl2.apple.com.edgekey.net.globalredir.akadns.net
 cl2-cn.apple.com
 cl3.apple.com
 cl3-cdn.origin-apple.com.akadns.net
@@ -43,13 +43,12 @@ download.developer.apple.com
 gs-loc.apple.com
 gs-loc-cn.apple.com
 gsp10-ssl-cn.ls.apple.com
-gsp11-cn.ls.apple.com
-gsp12-cn.ls.apple.com
 gsp13-cn.ls.apple.com
 gsp4-cn.ls.apple.com
 gsp4-cn.ls.apple.com.edgekey.net
 gsp4-cn.ls.apple.com.edgekey.net.globalredir.akadns.net
 gsp5-cn.ls.apple.com
+gsp85-cn-ssl.ls.apple.com
 gspe19-cn.ls.apple.com
 gspe19-cn.ls-apple.com.akadns.net
 gspe19-cn-ssl.ls.apple.com
@@ -96,11 +95,6 @@ pancake.cdn-apple.com.akadns.net
 phobos.apple.com
 prod-support.apple-support.akadns.net
 reserve-prime.apple.com
-s1.mzstatic.com
-s2.mzstatic.com
-s3.mzstatic.com
-s4.mzstatic.com
-s5.mzstatic.com
 s.mzstatic.com
 stocks-sparkline-lb.apple.com.akadns.net
 store.apple.com
@@ -118,6 +112,7 @@ swdist.apple.com
 swdist.apple.com.akadns.net
 swscan.apple.com
 swscan-cdn.apple.com.akadns.net
+updates.cdn-apple.com
 updates-http.cdn-apple.com
 updates-http.cdn-apple.com.akadns.net
 valid.apple.com
@@ -125,3 +120,4 @@ valid.origin-apple.com.akadns.net
 www.apple.com
 www.apple.com.edgekey.net
 www.apple.com.edgekey.net.globalredir.akadns.net
+xp.apple.com
